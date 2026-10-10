@@ -45,6 +45,8 @@ jobs:
 
       - name: Checkout OpenWrt
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || 'master' }}
 
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main
