@@ -46,6 +46,7 @@ jobs:
       - name: Checkout OpenWrt
         uses: actions/checkout@v4
         with:
+          repository: coolsnowwolf/lede
           ref: ${{ github.event.inputs.tag || 'master' }}
           fetch-depth: 0
 
