@@ -8,8 +8,12 @@
 name: OpenWrt-CI
 
 on:
-  schedule:
-    - cron: 0 20 * * *
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '指定源码的分支、Tag 或 Commit (例如: v23.05.0 或 master)'
+        required: true
+        default: 'master'
 
 permissions:
   contents: read
