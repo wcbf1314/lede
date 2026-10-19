@@ -49,7 +49,12 @@ jobs:
       - name: Update Feeds & Add Custom Feeds
         run: |         
           # 添加第三方软件源（Passwall、SmartDNS 依赖及增强插件）
-          echo 'src-git passwall https://github.com/xiaorouji/openwrt-passwall' >> feeds.conf.default
+          sed -i '/src-git packages/d' feeds.conf.default
+          sed -i '/src-git luci/d' feeds.conf.default
+          
+          # 2. 添加第三方与 ImmortalWrt 增强源
+          echo 'src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main' >> feeds.conf.default
+          echo 'src-git passwall https://github.com/Openwrt-Passwall/openwrt-passwall.git;main' >> feeds.conf.default
           echo 'src-git packages https://github.com/immortalwrt/packages.git' >> feeds.conf.default
           echo 'src-git luci https://github.com/immortalwrt/luci.git' >> feeds.conf.default
           
