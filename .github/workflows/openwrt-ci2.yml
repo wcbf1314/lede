@@ -6,7 +6,7 @@ on:
       tag:
         description: '指定 OpenWrt 分支或 Tag (例如: openwrt-23.05 或 main)'
         required: true
-        default: 'openwrt-23.05'
+        default: 'v25.12.6'
 
 permissions:
   contents: read
@@ -64,13 +64,13 @@ jobs:
           git clone https://github.com/pymumu/openwrt-smartdns.git smartdns
           git clone https://github.com/pymumu/luci-app-smartdns.git luci-app-smartdns
           
-          # 2. 克隆 PassWall 及其依赖包（已修正为最新官方 Openwrt-Passwall 组织）
+          # 2. 克隆 PassWall 及其依赖包
           git clone https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git passwall-packages
           git clone https://github.com/Openwrt-Passwall/openwrt-passwall.git passwall
           
-          # 3. 克隆 KMS (vlmcsd) 及其 LuCI
+          # 3. 克隆 KMS (vlmcsd) 及其 LuCI（已修正为 cokebar 维护的可用地址）
           git clone https://github.com/Wind4/vlmcsd.git
-          git clone https://github.com/cjxb/luci-app-vlmcsd.git
+          git clone https://github.com/cokebar/luci-app-vlmcsd.git luci-app-vlmcsd
           
           cd ../..
           ./scripts/feeds update -a
