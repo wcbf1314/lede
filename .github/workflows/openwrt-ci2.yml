@@ -8,30 +8,25 @@ on:
         required: true
         default: 'v25.12.6'
 
-permissions:
-  contents: read
-
 jobs:
-  build_openwrt:
-    name: Build OpenWrt for ESXi (x86_64)
+  build:
     runs-on: ubuntu-22.04
-
+    
     steps:
-      - name: Space cleanup and Initialization environment
+      - name: Initialization Environment
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
-          docker image prune -f
-          sudo -E rm -rf /usr/share/dotnet /etc/mysql /etc/php /etc/apt/sources.list.d /usr/local/lib/android
-          sudo -E apt-mark hold grub-efi-amd64-signed
-          sudo -E apt update
-          sudo -E apt -y purge azure-cli* docker* ghc* zulu* llvm* firefox google* dotnet* powershell* openjdk* mysql* php* mongodb* dotnet* snap*
-          sudo -E apt -y full-upgrade
-          sudo -E apt -y install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache clang cmake cpio curl device-tree-compiler flex gawk gcc-multilib g++-multilib gettext genisoimage git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool llvm lrzsz msmtp ninja-build p7zip p7zip-full patch pkgconf python3 python3-pyelftools python3-setuptools qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
-          sudo -E systemctl daemon-reload
-          sudo -E apt -y autoremove --purge
-          sudo -E apt clean
-          sudo -E timedatectl set-timezone "Asia/Shanghai"
+          sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache
+          sudo docker image prune --all --force
+          sudo apt-get update
+          sudo apt-get install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
+            bzip2 ccache cmake cpio curl libncurses5-dev gawk gettext gcc-multilib g++-multilib git gperf htop \
+            intltool libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev liblzo2-dev libpcap-dev libreadline-dev \
+            libssl-dev libtool lrzsz mkisofs nano ninja-build p7zip p7zip-full patch pkgconf python3 python3-pip \
+            python3-ply python3-docutils qemu-utils re2c rsync scons squashfs-tools subversion swig texinfo uglifyjs \
+            upx-ucl uuid-dev xsltproc zlib1g-dev zstd
+          sudo apt-get clean
 
       - name: Checkout OpenWrt Official
         uses: actions/checkout@v4
@@ -40,86 +35,114 @@ jobs:
           ref: ${{ github.event.inputs.tag || 'openwrt-23.05' }}
           fetch-depth: 0
 
-      - name: Free Disk Space (Ubuntu)
+      - name: Free Disk Space
         uses: jlumbroso/free-disk-space@main
         with:
-          tool-cache: true
+          tool-cache: false
           android: true
           dotnet: true
           haskell: true
           large-packages: true
-          swap-storage: true
+          docker-images: true
+          swap-storage: false
 
-      - name: Update feeds
-        run: |
+      - name: Update Feeds & Add Custom Feeds
+        run: |         
+          # 添加第三方软件源（Passwall、SmartDNS 依赖及增强插件）
+          echo 'src-git passwall https://github.com/xiaorouji/openwrt-passwall' >> feeds.conf.default
+          echo 'src-git packages https://github.com/immortalwrt/packages.git' >> feeds.conf.default
+          echo 'src-git luci https://github.com/immortalwrt/luci.git' >> feeds.conf.default
+          
+          # 更新并安装 Feeds
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: Clone Custom Plugins (SmartDNS, PassWall, KMS)
-        run: |
-          mkdir -p package/custom
-          cd package/custom
+      - name: Generate Configuration (.config)
+        run: |          
+          # 1. 基础架构配置 (x86_64)
+          echo "CONFIG_TARGET_x86=y" >> .config
+          echo "CONFIG_TARGET_x86_64=y" >> .config
+          echo "CONFIG_TARGET_x86_64_Generic=y" >> .config
           
-          # 1. 克隆 SmartDNS 及其 LuCI
-          git clone https://github.com/pymumu/openwrt-smartdns.git smartdns
-          git clone https://github.com/pymumu/luci-app-smartdns.git luci-app-smartdns
-          
-          # 2. 克隆 PassWall 及其依赖包
-          git clone https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git passwall-packages
-          git clone https://github.com/Openwrt-Passwall/openwrt-passwall.git passwall
-          
-          # 3. 克隆 KMS (vlmcsd) 及其 LuCI（已修正为 cokebar 维护的可用地址）
-          git clone https://github.com/Wind4/vlmcsd.git
-          git clone https://github.com/cokebar/luci-app-vlmcsd.git luci-app-vlmcsd
-          
-          cd ../..
-          ./scripts/feeds update -a
-          ./scripts/feeds install -a
+          # 2. 系统核心与 LuCI 界面
+          echo "CONFIG_PACKAGE_luci=y" >> .config
+          echo "CONFIG_PACKAGE_luci-theme-bootstrap=y" >> .config
+          echo "CONFIG_PACKAGE_luci-i18n-base-zh-cn=y" >> .config
+          echo "CONFIG_PACKAGE_htop=y" >> .config
+          echo "CONFIG_PACKAGE_curl=y" >> .config
+          echo "CONFIG_PACKAGE_wget-ssl=y" >> .config
 
-      - name: Generate Configuration (.config) for ESXi x86_64
-        run: |
-          rm -f .config
-          cat << 'EOF' > .config
-          # 目标架构配置 (x86_64)
-          CONFIG_TARGET_x86=y
-          CONFIG_TARGET_x86_64=y
-          CONFIG_TARGET_x86_64_Generic=y
-          
-          # ESXi 磁盘镜像格式 (vmdk)
-          CONFIG_TARGET_IMAGES_VMDK=y
-          
-          # ESXi 虚拟网卡驱动及增强工具
-          CONFIG_PACKAGE_kmod-vmxnet3=y
-          CONFIG_PACKAGE_kmod-e1000e=y
-          CONFIG_PACKAGE_kmod-open-vm-tools=y
-          
-          # LuCI 基础界面
-          CONFIG_PACKAGE_luci=y
-          CONFIG_PACKAGE_luci-theme-bootstrap=y
-          
-          # 添加 PassWall 及其核心
+          # 3. 根据你的 app_list.txt 写入核心勾选项
+          cat << 'EOF' >> .config
+          # 代理与科学上网
           CONFIG_PACKAGE_luci-app-passwall=y
           
-          # 添加 SmartDNS 
+          # DNS 与广告拦截
           CONFIG_PACKAGE_luci-app-smartdns=y
+          CONFIG_PACKAGE_smartdns=y
+          CONFIG_PACKAGE_luci-app-adbyby-plus=y
           
-          # 添加 KMS 服务 (vlmcsd)
+          # 网络加速与流控
+          CONFIG_PACKAGE_luci-app-turboacc=y
+          CONFIG_PACKAGE_kmod-tcp-bbr=y
+          CONFIG_PACKAGE_luci-app-nft-qos=y
+          CONFIG_PACKAGE_nft-qos=y
+          CONFIG_PACKAGE_sqm-scripts=y
+          CONFIG_PACKAGE_luci-app-sqm=y
+          
+          # 流量监控
+          CONFIG_PACKAGE_luci-app-nlbwmon=y
+          CONFIG_PACKAGE_luci-app-wrtbwmon=y
+          
+          # 文件共享与打印
+          CONFIG_PACKAGE_samba36-server=y
+          CONFIG_PACKAGE_luci-app-samba=y
+          CONFIG_PACKAGE_autosamba=y
+          CONFIG_PACKAGE_wsdd2=y
+          CONFIG_PACKAGE_luci-app-usb-printer=y
+          CONFIG_PACKAGE_p910nd=y
+          
+          # 动态 DNS (DDNS) 扩展
+          CONFIG_PACKAGE_luci-app-ddns=y
+          CONFIG_PACKAGE_ddns-scripts_aliyun=y
+          CONFIG_PACKAGE_ddns-scripts_dnspod=y
+          CONFIG_PACKAGE_ddns-scripts-cloudflare=y
+          
+          # 常用实用管理工具
+          CONFIG_PACKAGE_luci-app-autoreboot=y
+          CONFIG_PACKAGE_luci-app-wol=y
+          CONFIG_PACKAGE_etherwake=y
+          CONFIG_PACKAGE_luci-app-upnp=y
+          CONFIG_PACKAGE_miniupnpd=y
+          CONFIG_PACKAGE_luci-app-vsftpd=y
+          CONFIG_PACKAGE_vsftpd-alt=y
           CONFIG_PACKAGE_luci-app-vlmcsd=y
           CONFIG_PACKAGE_vlmcsd=y
-          EOF
+          CONFIG_PACKAGE_luci-app-arpbind=y
+          CONFIG_PACKAGE_luci-app-ramfree=y
           
+          # 文件系统与存储支持
+          CONFIG_PACKAGE_kmod-usb-storage=y
+          CONFIG_PACKAGE_kmod-usb-storage-uas=y
+          CONFIG_PACKAGE_kmod-fs-ext4=y
+          CONFIG_PACKAGE_kmod-fs-vfat=y
+          CONFIG_PACKAGE_kmod-fs-exfat=y
+          CONFIG_PACKAGE_block-mount=y
+          CONFIG_PACKAGE_automount=y
+          EOF
+
+          # 生成默认配置文件
           make defconfig
 
-      - name: Download packages
-        run: make download -j16
-
-      - name: Compile firmware
+      - name: Download Package Sources
         run: |
+          make download -j8
+          find dl -size -1024c -exec rm -f {} \;
+
+      - name: Compile Firmware
+        run: |
+          echo "Starting compilation..."
           make -j$(nproc) || make -j1 V=s
-          echo "======================="
-          echo "Space usage:"
-          echo "======================="
-          df -h
 
       - name: Prepare artifact
         run: |
